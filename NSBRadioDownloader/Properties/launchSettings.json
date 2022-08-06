@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "NSBRadioDownloader": {
+      "commandName": "Project",
+      "commandLineArgs": "-u https://archives.nsbradio.co.uk/index.php?dir=The%20JJPinkman%20Show/ -o C:\\music -d 5"
+    }
+  }
+}
