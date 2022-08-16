@@ -5,26 +5,28 @@
 
     internal class ShowDownloader
     {
-        public Options Options { get; private set; }
+        private readonly Options _options;
 
-        public IHttpClientFactory HttpClientFactory { get; private set; }
+        private readonly HttpClient _httpClient;
 
-        public ShowDownloader(Options options, IHttpClientFactory factory)
+        public ShowDownloader(Options options)
         {
-            Options = options ?? throw new ArgumentNullException(nameof(options));
-            HttpClientFactory = factory ?? throw new ArgumentNullException(nameof(factory));
+            _options = options ?? throw new ArgumentNullException(nameof(options));
+            _httpClient = new HttpClient()
+            {
+                Timeout = new TimeSpan(0, 30, 0)
+            };
         }
 
         public void Download()
         {
-            var shows = GetShows();
-            DownloadShows(shows).Wait();
+            DownloadShows(GetShows()).Wait();
         }
 
         private IEnumerable<ShowInfo?> GetShows()
         {
             var web = new HtmlWeb();
-            var doc = web.Load(Options.BaseUrl);
+            var doc = web.Load(_options.BaseUrl);
             const string selector = "//a[@class = 'noBreak']";
             return doc.DocumentNode.SelectNodes(selector).Select(ToShowInfo);
         }
@@ -34,13 +36,13 @@
             const string hrefAttribute = "href";
             const string fileAttribute = "file";
 
-            if (string.IsNullOrEmpty(Options.BaseUrl))
+            if (string.IsNullOrEmpty(_options.BaseUrl))
             {
-                throw new Exception("Options.BaseUrl is null or empty.");
+                throw new Exception("BaseUrl is null or empty.");
             }
 
             var href = HttpUtility.HtmlDecode(node.Attributes[hrefAttribute].Value);
-            var uri = new Uri(new Uri(Options.BaseUrl), href);
+            var uri = new Uri(new Uri(_options.BaseUrl), href);
             var name = HttpUtility.ParseQueryString(uri.Query)[fileAttribute];
 
             return new ShowInfo
@@ -52,27 +54,25 @@
 
         private async Task DownloadShows(IEnumerable<ShowInfo?> shows)
         {
-            if (string.IsNullOrEmpty(Options.OutputDirectory))
+            if (string.IsNullOrEmpty(_options.OutputDirectory))
             {
-                throw new Exception("Options.OutputDirectory is null or empty.");
+                throw new Exception("OutputDirectory is null or empty.");
             }
 
-            if (!Directory.Exists(Options.OutputDirectory))
+            if (!Directory.Exists(_options.OutputDirectory))
             {
-                Directory.CreateDirectory(Options.OutputDirectory);
-                Console.WriteLine("Created directory {0} ", Options.OutputDirectory);
+                Directory.CreateDirectory(_options.OutputDirectory);
+                Console.WriteLine("Created directory {0} ", _options.OutputDirectory);
             }
 
-            var client = HttpClientFactory.CreateClient();
-
-            var throttler = new SemaphoreSlim(Options.ParallelDownloads);
+            var throttler = new SemaphoreSlim(_options.ParallelDownloads);
 
             var tasks = shows.Select(async s =>
             {
                 await throttler.WaitAsync();
                 try
                 {
-                    await DownloadSignleShowAsync(client, s);
+                    await DownloadSignleShowAsync(_httpClient, s);
                 }
                 catch (Exception ex)
                 {
@@ -112,14 +112,14 @@
 
             Console.WriteLine("Downloading {0} ...", showInfo.Name);
 
-            if (string.IsNullOrEmpty(Options.OutputDirectory))
+            if (string.IsNullOrEmpty(_options.OutputDirectory))
             {
-                throw new Exception("Options.OutputDirectory is null or empty.");
+                throw new Exception("OutputDirectory is null or empty.");
             }
 
-            var fileName = Path.Combine(Options.OutputDirectory, showInfo.Name);
+            var fileName = Path.Combine(_options.OutputDirectory, showInfo.Name);
 
-            if (!Options.OverwriteFiles && File.Exists(fileName))
+            if (!_options.OverwriteFiles && File.Exists(fileName))
             {
                 Console.WriteLine("{0} already exists", showInfo.Name);
                 return;
